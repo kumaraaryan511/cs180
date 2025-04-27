@@ -122,16 +122,21 @@ def get_value():
     results = []
 
     if insert_or_not == 1:
-        # Insert
+        # Insert: handle multiple flashcards by splitting on newlines
         if user_input:
-            frequencies = compute_frequencies(user_input)
-            card = {
-                'id': user_id,
-                'frequencies': frequencies,
-                'content': user_input
-            }
-            all_flashcards.append(card)
-            save_flashcards(all_flashcards)
+            lines = user_input.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line:  # Avoid empty lines
+                    frequencies = compute_frequencies(line)
+                    card = {
+                        'id': user_id,
+                        'frequencies': frequencies,
+                        'content': line
+                    }
+                    all_flashcards.append(card)
+                    save_flashcards(all_flashcards)
+
 
         results = [
             f"[ID: {card['id']}, Frequencies: {card['frequencies']}] {card['content']}"
