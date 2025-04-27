@@ -1,116 +1,3 @@
-from flask import Flask, jsonify, request, render_template_string
-import os
-import re
-import nltk
-from nltk.corpus import wordnet
-
-# Make sure NLTK resources are available
-nltk.download('wordnet')
-nltk.download('omw-1.4')
-
-app = Flask(__name__)
-
-# File to store flashcards
-user_home = os.path.expanduser('~')
-flashcards_file = os.path.join(user_home, 'AllFlashcards.txt')
-
-# Load existing flashcards into memory
-def load_flashcards():
-    if os.path.exists(flashcards_file):
-        with open(flashcards_file, 'r', encoding='utf-8') as f:
-            cards = []
-            for line in f:
-                line = line.strip()
-                if line:
-                    # Line format: [ID: 0, Frequencies: {...}] content
-                    match = re.match(r'\[ID: (\d+), Frequencies: (.*?)\](.*)', line)
-                    if match:
-                        id_num = int(match.group(1))
-                        freq_str = match.group(2)
-                        content = match.group(3).strip()
-                        try:
-                            freq_dict = eval(freq_str)
-                        except:
-                            freq_dict = {}
-                        cards.append({'id': id_num, 'frequencies': freq_dict, 'content': content})
-            return cards
-    return []
-
-# Save flashcards to file
-def save_flashcards(cards):
-    with open(flashcards_file, 'w', encoding='utf-8') as f:
-        for card in cards:
-            line = f"[ID: {card['id']}, Frequencies: {card['frequencies']}] {card['content']}"
-            f.write(line + '\n')
-
-# Initialize flashcards
-all_flashcards = load_flashcards()
-
-# HTML form
-form_html = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Flashcard App</title>
-</head>
-<body>
-    <h1>Enter a Flashcard</h1>
-    <form action="/api/value" method="get">
-        <label for="user_string">Your String:</label><br>
-        <textarea id="user_string" name="user_string" rows="5" cols="50" placeholder="Enter your text here..."></textarea><br><br>
-
-        <label for="user_id">Flashcard ID (optional):</label>
-        <input type="number" id="user_id" name="user_id" placeholder="Defaults to 0"><br><br>
-
-        <label for="insertOrNot">Insert? (1 = yes, 0 = search):</label>
-        <input type="number" id="insertOrNot" name="insertOrNot" min="0" max="1" value="1"><br><br>
-
-        <button type="submit">Submit</button>
-    </form>
-
-    {% if values %}
-        <h2>Results:</h2>
-        <ul>
-        {% for val in values %}
-            <li style="white-space: pre-line;">{{ val }}</li>
-        {% endfor %}
-        </ul>
-    {% endif %}
-</body>
-</html>
-'''
-
-def expand_with_synonyms(words):
-    expanded = set(words)
-    for word in words:
-        for syn in wordnet.synsets(word):
-            for lemma in syn.lemmas():
-                expanded.add(lemma.name().replace('_', ' '))
-    return expanded
-
-def compute_frequencies(text):
-    words = re.findall(r'\w+', text.lower())
-    freq = {}
-    for word in words:
-        freq[word] = freq.get(word, 0) + 1
-    return freq
-
-def bm25_score(query_words, doc_freq, doc_len):
-    if doc_len == 0:
-        return 0
-    score = 0
-    for word in query_words:
-        freq = doc_freq.get(word, 0)
-        if freq > 0:
-            numerator = 2 * freq
-            denominator = freq + (2 * (0.25 * (doc_len / 20)))
-            score += numerator / denominator
-    return score
-
-@app.route('/', methods=['GET'])
-def index():
-    return render_template_string(form_html, values=None)
-
 @app.route('/api/value', methods=['GET'])
 def get_value():
     global all_flashcards
@@ -137,7 +24,6 @@ def get_value():
                     all_flashcards.append(card)
                     save_flashcards(all_flashcards)
 
-
         results = [
             f"[ID: {card['id']}, Frequencies: {card['frequencies']}] {card['content']}"
             for card in all_flashcards
@@ -162,7 +48,7 @@ def get_value():
                     scored_cards.append((score, card))
 
             # Sort descending by score
-            scored_cards.sort(reverse=True)
+            scored_cards.sort(key=lambda x: x[0], reverse=True)  # Sort by score (first element of tuple)
             results = [
                 f"[ID: {card['id']}, Frequencies: {card['frequencies']}] {card['content']}"
                 for score, card in scored_cards
@@ -174,6 +60,3 @@ def get_value():
 
     # Otherwise JSON
     return jsonify({'strings': results})
-
-if __name__ == '__main__':
-    app.run(debug=True)
